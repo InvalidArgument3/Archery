@@ -170,27 +170,32 @@ public class FletchingTableScreenHandler extends AbstractContainerMenu {
         }
     }
 
-
     protected void preview() {
         CraftActionPipelineArch pipeline = buildPipeline();
 
         ItemStack result = pipeline.preview();
+
+        container.setItem(
+                OUTPUT_SLOT,
+                result.isEmpty() ? ItemStack.EMPTY : result
+        );
+    }
+
+    private void performCraft() {
+        CraftActionPipelineArch pipeline = buildPipeline();
+        ItemStack result = pipeline.perform();
         if (result.isEmpty()) {
             container.setItem(OUTPUT_SLOT, ItemStack.EMPTY);
             return;
         }
-
-        //result.setCount(pipeline.calculateMaxProduction());
-        container.setItem(OUTPUT_SLOT, result);
-    }
-
-    protected void performCraft() {
-        CraftActionPipelineArch pipeline = buildPipeline();
-        ItemStack result = pipeline.perform();
-        container.setItem(OUTPUT_SLOT, result);
-        ItemStack stack = container.getItem(ARROW_INPUT_SLOT).copy();
-        stack.setCount(stack.getCount() - result.getCount());
-        container.setItem(ARROW_INPUT_SLOT, stack);
+        ItemStack input = container.getItem(ARROW_INPUT_SLOT);
+        int remaining = input.getCount() - result.getCount();
+        if (remaining <= 0) {
+            container.setItem(ARROW_INPUT_SLOT, ItemStack.EMPTY);
+        } else {
+            input.shrink(result.getCount());
+            container.setItem(ARROW_INPUT_SLOT, input);
+        }
         container.setChanged();
     }
 
@@ -207,28 +212,55 @@ public class FletchingTableScreenHandler extends AbstractContainerMenu {
 
     @Override
     public ItemStack quickMoveStack(Player player, int index) {
-        ItemStack original = ItemStack.EMPTY;
         Slot slot = this.slots.get(index);
 
-        if (slot != null && slot.hasItem()) {
-            ItemStack stack = slot.getItem();
-            original = stack.copy();
+        if (slot == null || !slot.hasItem()) {
+            return ItemStack.EMPTY;
+        }
 
-            if (index < CONTAINER_SIZE) {
-                if (!this.moveItemStackTo(stack, CONTAINER_SIZE, this.slots.size(), true)) {
-                    return ItemStack.EMPTY;
-                }
-            } else {
-                if (!this.moveItemStackTo(stack, 0, INPUT_SLOTS, false)) {
-                    return ItemStack.EMPTY;
-                }
-            }
+        ItemStack original = slot.getItem().copy();
 
-            if (stack.isEmpty()) {
-                slot.set(ItemStack.EMPTY);
-            } else {
-                slot.setChanged();
+        if (index == OUTPUT_SLOT) {
+            ItemStack result = slot.getItem().copy();
+            if (!this.moveItemStackTo(
+                    result,
+                    CONTAINER_SIZE,
+                    this.slots.size(),
+                    true
+            )) {
+                return ItemStack.EMPTY;
             }
+            slot.set(result);
+            performCraft();
+            preview();
+
+            return original;
+        }
+
+        if (index < INPUT_SLOTS) {
+            if (!this.moveItemStackTo(
+                    slot.getItem(),
+                    CONTAINER_SIZE,
+                    this.slots.size(),
+                    true
+            )) {
+                return ItemStack.EMPTY;
+            }
+        } else {
+            if (!this.moveItemStackTo(
+                    slot.getItem(),
+                    0,
+                    INPUT_SLOTS,
+                    false
+            )) {
+                return ItemStack.EMPTY;
+            }
+        }
+
+        if (slot.getItem().isEmpty()) {
+            slot.set(ItemStack.EMPTY);
+        } else {
+            slot.setChanged();
         }
 
         preview();
